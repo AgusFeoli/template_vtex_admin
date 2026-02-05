@@ -18,5 +18,15 @@
   "admin/admin-example.create.price": "Precio",
   "admin/admin-example.create.cancel": "Cancelar",
   "admin/admin-example.create.confirm": "Confirmar",
-  "admin/admin-example.create.confirmMessage": "¡Tu producto fue enviado con éxito!"
+  "admin/admin-example.create.confirmMessage": "¡Tu producto fue enviado con éxito!",
+  "admin/admin-customers.navigation.label": "Clientes",
+  "admin/admin-customers.title": "Información de Clientes",
+  "admin/admin-customers.column.name": "Nombre",
+  "admin/admin-customers.column.email": "Correo electrónico",
+  "admin/admin-customers.column.phone": "Teléfono",
+  "admin/admin-customers.column.registrationDate": "Fecha de registro",
+  "admin/admin-customers.search.placeholder": "Buscar por nombre o correo",
+  "admin/admin-customers.loading": "Cargando clientes...",
+  "admin/admin-customers.noData": "No se encontraron clientes",
+  "admin/admin-customers.error": "Error al cargar los clientes"
 }

@@ -18,5 +18,15 @@
   "admin/admin-example.create.price": "Price",
   "admin/admin-example.create.cancel": "Cancel",
   "admin/admin-example.create.confirm": "Confirm",
-  "admin/admin-example.create.confirmMessage": "Your product was successfully sent!"
+  "admin/admin-example.create.confirmMessage": "Your product was successfully sent!",
+  "admin/admin-customers.navigation.label": "Customers",
+  "admin/admin-customers.title": "Customer Information",
+  "admin/admin-customers.column.name": "Name",
+  "admin/admin-customers.column.email": "Email",
+  "admin/admin-customers.column.phone": "Phone",
+  "admin/admin-customers.column.registrationDate": "Registration Date",
+  "admin/admin-customers.search.placeholder": "Search by name or email",
+  "admin/admin-customers.loading": "Loading customers...",
+  "admin/admin-customers.noData": "No customers found",
+  "admin/admin-customers.error": "Error loading customers"
 }

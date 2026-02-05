@@ -2,6 +2,7 @@ import type { ClientsConfig, ServiceContext, RecorderState } from '@vtex/api'
 import { LRUCache, method, Service } from '@vtex/api'
 
 import { Clients } from './clients'
+import { getCustomers } from './middlewares/customers'
 import { status } from './middlewares/status'
 import { validate } from './middlewares/validate'
 
@@ -51,6 +52,9 @@ export default new Service({
     // `status` is the route ID from service.json. It maps to an array of middlewares (or a single handler).
     status: method({
       GET: [validate, status],
+    }),
+    customers: method({
+      GET: [getCustomers],
     }),
   },
 })
