@@ -111,7 +111,8 @@ function AdminCustomers() {
   }, [])
 
   useEffect(() => {
-    const currentPage = Math.ceil(pagination.range[0] / ITEMS_PER_PAGE)
+    // pagination.range[0] is 0-indexed, so we add 1 to get 1-indexed page for the API
+    const currentPage = Math.floor(pagination.range[0] / ITEMS_PER_PAGE) + 1
 
     fetchCustomers(currentPage, ITEMS_PER_PAGE)
   }, [fetchCustomers, pagination.range])
