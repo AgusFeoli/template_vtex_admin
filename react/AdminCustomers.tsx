@@ -76,23 +76,22 @@ function AdminCustomers() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [totalItems, setTotalItems] = useState(0)
 
   const view = useDataViewState()
   const search = useSearchState()
   const pagination = usePaginationState({
     pageSize: ITEMS_PER_PAGE,
-    total: totalItems,
+    total: 0,
   })
 
-  const fetchCustomers = useCallback(async (page: number, pageSize: number) => {
+  // Fetch all customers on mount
+  const fetchCustomers = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const response = await fetch(
-        `/_v/customers?page=${page}&pageSize=${pageSize}`
-      )
+      // Fetch a larger batch to enable client-side pagination and search
+      const response = await fetch(`/_v/customers?page=1&pageSize=100`)
 
       if (!response.ok) {
         throw new Error('Failed to fetch customers')
@@ -101,7 +100,6 @@ function AdminCustomers() {
       const data = await response.json()
 
       setCustomers(data)
-      setTotalItems(data.length >= pageSize ? (page + 1) * pageSize : page * pageSize - (pageSize - data.length))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       setCustomers([])
@@ -111,12 +109,10 @@ function AdminCustomers() {
   }, [])
 
   useEffect(() => {
-    // pagination.range[0] is 0-indexed, so we add 1 to get 1-indexed page for the API
-    const currentPage = Math.floor(pagination.range[0] / ITEMS_PER_PAGE) + 1
+    fetchCustomers()
+  }, [fetchCustomers])
 
-    fetchCustomers(currentPage, ITEMS_PER_PAGE)
-  }, [fetchCustomers, pagination.range])
-
+  // Filter customers based on search
   const filteredCustomers = React.useMemo(() => {
     if (!search.debouncedValue) {
       return customers
@@ -131,6 +127,20 @@ function AdminCustomers() {
       return fullName.includes(searchLower) || email.includes(searchLower)
     })
   }, [customers, search.debouncedValue])
+
+  // Update pagination total when filtered results change
+  useEffect(() => {
+    pagination.paginate({ type: 'setTotal', total: filteredCustomers.length })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredCustomers.length])
+
+  // Slice data for current page (pagination.range is 1-indexed)
+  const paginatedCustomers = React.useMemo(() => {
+    return filteredCustomers.slice(
+      pagination.range[0] - 1,
+      pagination.range[1]
+    )
+  }, [filteredCustomers, pagination.range])
 
   const grid = useDataGridState({
     view,
@@ -194,11 +204,11 @@ function AdminCustomers() {
         },
       },
     ],
-    items: filteredCustomers,
+    items: paginatedCustomers,
     length: ITEMS_PER_PAGE,
   })
 
-  if (loading && customers.length === 0) {
+  if (loading) {
     return (
       <I18nProvider locale={locale}>
         <ThemeProvider>
@@ -261,7 +271,7 @@ function AdminCustomers() {
                   nextLabel="Next"
                 />
               </DataViewControls>
-              {filteredCustomers.length === 0 ? (
+              {paginatedCustomers.length === 0 ? (
                 <Center style={{ height: '200px' }}>
                   <Text>
                     <FormattedMessage {...messages.noData} />
