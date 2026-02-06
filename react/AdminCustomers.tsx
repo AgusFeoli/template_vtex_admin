@@ -84,7 +84,6 @@ interface CustomerResponse {
 const PAGE_SIZE = 15
 
 function CustomersContent() {
-  const { account, workspace } = useRuntime()
   const intl = useIntl()
   const showToast = useToast()
 
@@ -141,7 +140,6 @@ function CustomersContent() {
       view.setStatus({ type: 'loading' })
 
       try {
-        const baseUrl = `https://${workspace}--${account}.myvtex.com`
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(PAGE_SIZE),
@@ -151,7 +149,8 @@ function CustomersContent() {
           params.append('search', searchTerm)
         }
 
-        const response = await fetch(`${baseUrl}/_v/customers?${params}`)
+        // Use relative URL - VTEX IO routes the request through the service infrastructure
+        const response = await fetch(`/_v/customers?${params}`)
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
@@ -184,14 +183,12 @@ function CustomersContent() {
         setLoading(false)
       }
     },
-    [account, workspace, intl, view, showToast]
+    [intl, view, showToast]
   )
 
   useEffect(() => {
-    // Use page 1 for initial load (Master Data is 1-indexed)
-    const currentPage = pagination.currentPage + 1
-
-    fetchCustomers(currentPage, search.debouncedValue || '')
+    // usePaginationState from @vtex/admin-ui is already 1-indexed (starts at 1)
+    fetchCustomers(pagination.currentPage, search.debouncedValue || '')
   }, [pagination.currentPage, search.debouncedValue, fetchCustomers])
 
   return (

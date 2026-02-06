@@ -12,7 +12,7 @@
     },
     "customers": {
       "path": "/_v/customers",
-      "public": false
+      "public": true
     }
   }
 }

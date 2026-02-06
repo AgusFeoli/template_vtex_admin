@@ -27,6 +27,16 @@
       }
     },
     {
+      "name": "outbound-access",
+      "attrs": {
+        "host": "api.vtex.com",
+        "path": "/api/*"
+      }
+    },
+    {
+      "name": "ADMIN_DS"
+    },
+    {
       "name": "colossus-fire-event"
     },
     {
