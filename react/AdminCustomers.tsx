@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useRuntime } from 'vtex.render-runtime'
 import { defineMessages, FormattedMessage, useIntl } from 'react-intl'
 import {
@@ -67,6 +67,15 @@ interface Customer {
   createdIn: string
 }
 
+interface PaginatedResponse {
+  data: Customer[]
+  pagination: {
+    from: number
+    to: number
+    total: number
+  }
+}
+
 function AdminCustomers() {
   const {
     culture: { locale },
@@ -76,6 +85,7 @@ function AdminCustomers() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [total, setTotal] = useState(0)
 
   const view = useDataViewState()
   const search = useSearchState()
@@ -84,63 +94,84 @@ function AdminCustomers() {
     total: 0,
   })
 
-  // Fetch all customers using scroll pagination
-  const fetchCustomers = useCallback(async () => {
+  // Track previous values to detect changes
+  const prevRangeRef = useRef(pagination.range)
+  const prevSearchRef = useRef(search.debouncedValue)
+
+  // Fetch customers from server with pagination
+  const fetchCustomers = useCallback(async (from: number, to: number, searchTerm?: string) => {
     setLoading(true)
     setError(null)
 
     try {
-      // Use scroll pagination to fetch all customers
-      const response = await fetch(`/_v/customers?useScroll=true`)
+      const params = new URLSearchParams({
+        from: from.toString(),
+        to: to.toString(),
+      })
+
+      if (searchTerm) {
+        params.append('search', searchTerm)
+      }
+
+      const response = await fetch(`/_v/customers?${params.toString()}`)
 
       if (!response.ok) {
         throw new Error('Failed to fetch customers')
       }
 
-      const data = await response.json()
+      const result: PaginatedResponse = await response.json()
 
-      setCustomers(Array.isArray(data) ? data : [])
+      setCustomers(result.data || [])
+      setTotal(result.pagination?.total || 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       setCustomers([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
   }, [])
 
+  // Initial load
   useEffect(() => {
-    fetchCustomers()
+    fetchCustomers(0, ITEMS_PER_PAGE, '')
   }, [fetchCustomers])
 
-  // Filter customers based on search
-  const filteredCustomers = React.useMemo(() => {
-    if (!search.debouncedValue) {
-      return customers
-    }
-
-    const searchLower = search.debouncedValue.toLowerCase()
-
-    return customers.filter((customer) => {
-      const fullName = `${customer.firstName || ''} ${customer.lastName || ''}`.toLowerCase()
-      const email = (customer.email || '').toLowerCase()
-
-      return fullName.includes(searchLower) || email.includes(searchLower)
-    })
-  }, [customers, search.debouncedValue])
-
-  // Update pagination total when filtered results change
+  // Update total in pagination state when total changes
   useEffect(() => {
-    pagination.paginate({ type: 'setTotal', total: filteredCustomers.length })
+    pagination.paginate({ type: 'setTotal', total })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredCustomers.length])
+  }, [total])
 
-  // Slice data for current page (pagination.range is 1-indexed)
-  const paginatedCustomers = React.useMemo(() => {
-    return filteredCustomers.slice(
-      pagination.range[0] - 1,
-      pagination.range[1]
-    )
-  }, [filteredCustomers, pagination.range])
+  // Handle pagination changes (when user clicks next/prev)
+  useEffect(() => {
+    const rangeChanged =
+      prevRangeRef.current[0] !== pagination.range[0] ||
+      prevRangeRef.current[1] !== pagination.range[1]
+
+    if (rangeChanged && !loading) {
+      prevRangeRef.current = pagination.range
+      // pagination.range is 1-indexed, API expects 0-indexed
+      const from = pagination.range[0] - 1
+      const to = pagination.range[1]
+
+      fetchCustomers(from, to, search.debouncedValue || '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.range])
+
+  // Handle search changes
+  useEffect(() => {
+    const searchChanged = prevSearchRef.current !== search.debouncedValue
+
+    if (searchChanged) {
+      prevSearchRef.current = search.debouncedValue
+      // Reset to first page when search changes
+      pagination.paginate({ type: 'reset' })
+      fetchCustomers(0, ITEMS_PER_PAGE, search.debouncedValue || '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.debouncedValue])
 
   const grid = useDataGridState({
     view,
@@ -204,11 +235,11 @@ function AdminCustomers() {
         },
       },
     ],
-    items: paginatedCustomers,
+    items: customers,
     length: ITEMS_PER_PAGE,
   })
 
-  if (loading) {
+  if (loading && customers.length === 0) {
     return (
       <I18nProvider locale={locale}>
         <ThemeProvider>
@@ -269,9 +300,10 @@ function AdminCustomers() {
                   subject="results"
                   prevLabel="Previous"
                   nextLabel="Next"
+                  loading={loading}
                 />
               </DataViewControls>
-              {paginatedCustomers.length === 0 ? (
+              {customers.length === 0 ? (
                 <Center style={{ height: '200px' }}>
                   <Text>
                     <FormattedMessage {...messages.noData} />

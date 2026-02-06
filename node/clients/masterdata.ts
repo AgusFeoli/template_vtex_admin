@@ -1,6 +1,13 @@
 import type { IOContext, InstanceOptions } from '@vtex/api'
 import { MasterData } from '@vtex/api'
 
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  from: number
+  to: number
+}
+
 export default class MasterDataClient extends MasterData {
   constructor(context: IOContext, options?: InstanceOptions) {
     super(context, {
@@ -8,79 +15,78 @@ export default class MasterDataClient extends MasterData {
     })
   }
 
-  // Fetch all customers using scroll pagination
-  public async getAllCustomers(): Promise<any[]> {
-    const allCustomers: any[] = []
-    let mdToken: string | undefined
-    let hasMore = true
-    let iterations = 0
-    const maxIterations = 100 // Safety limit
+  /**
+   * Fetch customers with server-side pagination using REST-Range header
+   * @param from - Start index (0-based)
+   * @param to - End index (exclusive)
+   * @param search - Optional search term to filter by name or email
+   */
+  public async getCustomersPaginated(
+    from: number,
+    to: number,
+    search?: string
+  ): Promise<PaginatedResponse<any>> {
+    const fields = ['id', 'firstName', 'lastName', 'email', 'phone', 'createdIn']
 
-    while (hasMore && iterations < maxIterations) {
-      iterations++
+    // Build where clause for search
+    let where: string | undefined
 
-      try {
-        const scrollResult = await this.scrollDocuments({
-          dataEntity: 'CL',
-          fields: ['id', 'firstName', 'lastName', 'email', 'phone', 'createdIn'],
-          size: 100,
-          mdToken,
-        })
-
-        // scrollDocuments returns { data: T[], mdToken: string }
-        const data = (scrollResult as any).data || scrollResult
-        const token = (scrollResult as any).mdToken
-
-        if (Array.isArray(data) && data.length > 0) {
-          allCustomers.push(...data)
-
-          // If we got less than 100 results, we've reached the end
-          if (data.length < 100) {
-            hasMore = false
-          } else if (token) {
-            // Use the token for the next request
-            mdToken = token
-          } else {
-            // No token and got 100 results - might be more but can't continue
-            hasMore = false
-          }
-        } else {
-          hasMore = false
-        }
-      } catch (error) {
-        console.error('Error in scroll iteration:', error)
-        hasMore = false
-      }
+    if (search) {
+      // Search in firstName, lastName, or email
+      // Master Data v1 uses * for wildcard matching
+      where = `firstName=*${search}* OR lastName=*${search}* OR email=*${search}*`
     }
 
-    return allCustomers
-  }
+    try {
+      // Use the http client directly to set custom headers
+      const response = await this.http.getRaw<any[]>(
+        `/api/dataentities/CL/search`,
+        {
+          params: {
+            _fields: fields.join(','),
+            _sort: 'createdIn DESC',
+            ...(where && { _where: where }),
+          },
+          headers: {
+            'REST-Range': `resources=${from}-${to}`,
+          },
+        }
+      )
 
-  public async getCustomers(
-    page: number = 1,
-    pageSize: number = 15
-  ): Promise<any[]> {
-    return this.searchDocuments({
-      dataEntity: 'CL',
-      fields: ['id', 'firstName', 'lastName', 'email', 'phone', 'createdIn'],
-      pagination: { page, pageSize },
-    })
-  }
+      // Parse REST-Content-Range header: "resources=0-14/250"
+      const contentRange = response.headers['rest-content-range'] || ''
+      const rangeMatch = contentRange.match(/resources=(\d+)-(\d+)\/(\d+)/)
 
-  public async getCustomerById(id: string): Promise<any> {
-    return this.getDocument({
-      dataEntity: 'CL',
-      id,
-      fields: ['id', 'firstName', 'lastName', 'email', 'phone', 'createdIn'],
-    })
-  }
+      let total = 0
+      let actualFrom = from
+      let actualTo = to
 
-  public async searchCustomersByEmail(email: string): Promise<any[]> {
-    return this.searchDocuments({
-      dataEntity: 'CL',
-      fields: ['id', 'firstName', 'lastName', 'email', 'phone', 'createdIn'],
-      pagination: { page: 1, pageSize: 15 },
-      where: `email=${email}`,
-    })
+      if (rangeMatch) {
+        actualFrom = parseInt(rangeMatch[1], 10)
+        actualTo = parseInt(rangeMatch[2], 10)
+        total = parseInt(rangeMatch[3], 10)
+      }
+
+      return {
+        data: response.data || [],
+        total,
+        from: actualFrom,
+        to: actualTo,
+      }
+    } catch (error: any) {
+      console.error('Error fetching customers with pagination:', error)
+
+      // If there's no data, return empty response
+      if (error.response?.status === 404 || error.response?.status === 416) {
+        return {
+          data: [],
+          total: 0,
+          from,
+          to,
+        }
+      }
+
+      throw error
+    }
   }
 }

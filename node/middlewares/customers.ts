@@ -1,26 +1,33 @@
 export async function getCustomers(ctx: Context, next: () => Promise<void>) {
-  const { useScroll = 'true' } = ctx.query as {
-    useScroll?: string
+  const {
+    from = '0',
+    to = '15',
+    search = '',
+  } = ctx.query as {
+    from?: string
+    to?: string
+    search?: string
   }
 
   try {
-    let customers: any[]
+    const fromNum = Math.max(0, parseInt(from, 10) || 0)
+    const toNum = Math.min(fromNum + 100, parseInt(to, 10) || 15) // Max 100 per request
 
-    if (useScroll === 'true') {
-      // Use scroll pagination to fetch all customers
-      customers = await ctx.clients.masterdata.getAllCustomers()
-    } else {
-      // Fallback to regular pagination
-      const { page = '1', pageSize = '15' } = ctx.query as {
-        page?: string
-        pageSize?: string
-      }
-      const pageNum = parseInt(page, 10) || 1
-      const pageSizeNum = Math.min(parseInt(pageSize, 10) || 15, 100)
-      customers = await ctx.clients.masterdata.getCustomers(pageNum, pageSizeNum)
+    const result = await ctx.clients.masterdata.getCustomersPaginated(
+      fromNum,
+      toNum,
+      search || undefined
+    )
+
+    // Return paginated response with metadata
+    ctx.body = {
+      data: result.data,
+      pagination: {
+        from: result.from,
+        to: result.to,
+        total: result.total,
+      },
     }
-
-    ctx.body = customers
     ctx.status = 200
   } catch (error) {
     console.error('Error fetching customers:', error)
