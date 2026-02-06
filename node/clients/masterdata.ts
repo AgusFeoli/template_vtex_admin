@@ -3,9 +3,11 @@ import { MasterData } from '@vtex/api'
 
 interface PaginatedResponse<T> {
   data: T[]
-  total: number
-  from: number
-  to: number
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+  }
 }
 
 export default class MasterDataClient extends MasterData {
@@ -16,73 +18,69 @@ export default class MasterDataClient extends MasterData {
   }
 
   /**
-   * Fetch customers with server-side pagination using REST-Range header
-   * @param from - Start index (0-based)
-   * @param to - End index (exclusive)
-   * @param search - Optional search term to filter by name or email
+   * Fetch customers with server-side pagination
+   * Uses searchDocumentsWithPaginationInfo for proper pagination with total count
    */
   public async getCustomersPaginated(
-    from: number,
-    to: number,
+    page: number,
+    pageSize: number,
     search?: string
   ): Promise<PaginatedResponse<any>> {
     const fields = ['id', 'firstName', 'lastName', 'email', 'phone', 'createdIn']
 
-    // Build where clause for search
+    // Build where clause for search if provided
     let where: string | undefined
 
-    if (search) {
-      // Search in firstName, lastName, or email
-      // Master Data v1 uses * for wildcard matching
+    if (search && search.trim()) {
+      // Search in firstName, lastName, or email using wildcard matching
       where = `firstName=*${search}* OR lastName=*${search}* OR email=*${search}*`
     }
 
     try {
-      // Use the http client directly to set custom headers
-      const response = await this.http.getRaw<any[]>(
-        `/api/dataentities/CL/search`,
-        {
-          params: {
-            _fields: fields.join(','),
-            _sort: 'createdIn DESC',
-            ...(where && { _where: where }),
-          },
-          headers: {
-            'REST-Range': `resources=${from}-${to}`,
-          },
-        }
-      )
-
-      // Parse REST-Content-Range header: "resources=0-14/250"
-      const contentRange = response.headers['rest-content-range'] || ''
-      const rangeMatch = contentRange.match(/resources=(\d+)-(\d+)\/(\d+)/)
-
-      let total = 0
-      let actualFrom = from
-      let actualTo = to
-
-      if (rangeMatch) {
-        actualFrom = parseInt(rangeMatch[1], 10)
-        actualTo = parseInt(rangeMatch[2], 10)
-        total = parseInt(rangeMatch[3], 10)
-      }
+      // Use searchDocumentsWithPaginationInfo to get total count
+      const result = await this.searchDocumentsWithPaginationInfo({
+        dataEntity: 'CL',
+        fields,
+        pagination: {
+          page,
+          pageSize: Math.min(pageSize, 100), // Max 100 per page
+        },
+        ...(where && { where }),
+        sort: 'createdIn DESC',
+      })
 
       return {
-        data: response.data || [],
-        total,
-        from: actualFrom,
-        to: actualTo,
+        data: result.data || [],
+        pagination: {
+          page: result.pagination?.page || page,
+          pageSize: result.pagination?.pageSize || pageSize,
+          total: result.pagination?.total || 0,
+        },
       }
     } catch (error: any) {
       console.error('Error fetching customers with pagination:', error)
 
-      // If there's no data, return empty response
-      if (error.response?.status === 404 || error.response?.status === 416) {
+      // If search fails (e.g., field not searchable), try without search
+      if (search && error.response?.status === 400) {
+        console.log('Retrying without search filter...')
+
+        const fallbackResult = await this.searchDocumentsWithPaginationInfo({
+          dataEntity: 'CL',
+          fields,
+          pagination: {
+            page,
+            pageSize: Math.min(pageSize, 100),
+          },
+          sort: 'createdIn DESC',
+        })
+
         return {
-          data: [],
-          total: 0,
-          from,
-          to,
+          data: fallbackResult.data || [],
+          pagination: {
+            page: fallbackResult.pagination?.page || page,
+            pageSize: fallbackResult.pagination?.pageSize || pageSize,
+            total: fallbackResult.pagination?.total || 0,
+          },
         }
       }
 

@@ -70,8 +70,8 @@ interface Customer {
 interface PaginatedResponse {
   data: Customer[]
   pagination: {
-    from: number
-    to: number
+    page: number
+    pageSize: number
     total: number
   }
 }
@@ -98,15 +98,20 @@ function AdminCustomers() {
   const prevRangeRef = useRef(pagination.range)
   const prevSearchRef = useRef(search.debouncedValue)
 
+  // Calculate current page from range (range is 1-indexed)
+  const getCurrentPage = useCallback(() => {
+    return Math.ceil(pagination.range[0] / ITEMS_PER_PAGE)
+  }, [pagination.range])
+
   // Fetch customers from server with pagination
-  const fetchCustomers = useCallback(async (from: number, to: number, searchTerm?: string) => {
+  const fetchCustomers = useCallback(async (page: number, searchTerm?: string) => {
     setLoading(true)
     setError(null)
 
     try {
       const params = new URLSearchParams({
-        from: from.toString(),
-        to: to.toString(),
+        page: page.toString(),
+        pageSize: ITEMS_PER_PAGE.toString(),
       })
 
       if (searchTerm) {
@@ -134,7 +139,7 @@ function AdminCustomers() {
 
   // Initial load
   useEffect(() => {
-    fetchCustomers(0, ITEMS_PER_PAGE, '')
+    fetchCustomers(1, '')
   }, [fetchCustomers])
 
   // Update total in pagination state when total changes
@@ -151,11 +156,9 @@ function AdminCustomers() {
 
     if (rangeChanged && !loading) {
       prevRangeRef.current = pagination.range
-      // pagination.range is 1-indexed, API expects 0-indexed
-      const from = pagination.range[0] - 1
-      const to = pagination.range[1]
+      const page = getCurrentPage()
 
-      fetchCustomers(from, to, search.debouncedValue || '')
+      fetchCustomers(page, search.debouncedValue || '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.range])
@@ -168,7 +171,7 @@ function AdminCustomers() {
       prevSearchRef.current = search.debouncedValue
       // Reset to first page when search changes
       pagination.paginate({ type: 'reset' })
-      fetchCustomers(0, ITEMS_PER_PAGE, search.debouncedValue || '')
+      fetchCustomers(1, search.debouncedValue || '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.debouncedValue])
