@@ -7,6 +7,10 @@
     {
       "labelId": "admin/admin-example.navigation.label-main",
       "path": "/admin/example"
+    },
+    {
+      "labelId": "admin/admin-customers.navigation.label",
+      "path": "/admin/customers"
     }
   ]
 }
