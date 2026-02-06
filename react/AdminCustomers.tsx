@@ -84,14 +84,14 @@ function AdminCustomers() {
     total: 0,
   })
 
-  // Fetch all customers on mount
+  // Fetch all customers using scroll pagination
   const fetchCustomers = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      // Fetch a larger batch to enable client-side pagination and search
-      const response = await fetch(`/_v/customers?page=1&pageSize=100`)
+      // Use scroll pagination to fetch all customers
+      const response = await fetch(`/_v/customers?useScroll=true`)
 
       if (!response.ok) {
         throw new Error('Failed to fetch customers')
@@ -99,7 +99,7 @@ function AdminCustomers() {
 
       const data = await response.json()
 
-      setCustomers(data)
+      setCustomers(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       setCustomers([])
